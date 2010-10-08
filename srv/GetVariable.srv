@@ -1,0 +1,4 @@
+string nodeName
+string variableName
+---
+int16[] data
