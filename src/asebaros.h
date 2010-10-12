@@ -2,6 +2,8 @@
 #define __ASEBA_ROS_H
 
 #include <dashel/dashel.h>
+#include <boost/thread.hpp>
+#include <boost/thread/mutex.hpp>
 
 #include <msg/msg.h>
 #include <msg/descriptions-manager.h>
@@ -30,6 +32,7 @@ class AsebaROS;
 class AsebaDashelHub: public Dashel::Hub
 {
 private:
+	boost::thread* thread; //! thread for the hub
 	AsebaROS* asebaROS; //!< pointer to aseba ROS
 	bool forward; //!< should we only forward messages instead of transmit them back to the sender
 	
@@ -45,8 +48,15 @@ public:
 		@param message aseba message to send
 		@param sourceStream originate of the message, if from Dashel.
 	*/
-	void sendMessage(Aseba::Message *message, Dashel::Stream* sourceStream = 0);
+	void sendMessage(Aseba::Message *message, bool doLock, Dashel::Stream* sourceStream = 0);
 
+	//! run the hub
+	void operator()();
+	//! start the hub thread
+	void startThread();
+	//! stop the hub thread and wait for its termination
+	void stopThread();
+	
 protected:
 	virtual void connectionCreated(Dashel::Stream *stream);
 	virtual void incomingData(Dashel::Stream *stream);
@@ -73,8 +83,8 @@ protected:
 	Publishers pubs; //!< publishers for known events
 	Subscribers subs; //!< subscribers for known events
 
-	ros::AsyncSpinner spinner; //!< threads to process ros queries
 	AsebaDashelHub hub; //!< hub is the network interface for dashel peers
+	boost::mutex mutex; //!< mutex for protecting accesses from hub
 	
 	Aseba::CommonDefinitions commonDefinitions; //!< description of aseba constants and events
 	NodesNamesMap nodesNames; //!< the name of all nodes

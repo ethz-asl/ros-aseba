@@ -7,6 +7,7 @@
 #include <vector>
 #include <sstream>
 #include <boost/format.hpp>
+#include <boost/interprocess/sync/scoped_lock.hpp>
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -30,7 +31,7 @@ AsebaDashelHub::AsebaDashelHub(AsebaROS* asebaROS, unsigned port, bool forward):
 	Dashel::Hub::connect(oss.str());
 }
 
-void AsebaDashelHub::sendMessage(Message *message, Stream* sourceStream)
+void AsebaDashelHub::sendMessage(Message *message, bool doLock, Stream* sourceStream)
 {
 	// dump if requested
 	// TODO: check verbosity
@@ -39,8 +40,9 @@ void AsebaDashelHub::sendMessage(Message *message, Stream* sourceStream)
 	message->dump(oss);
 	ROS_DEBUG_STREAM(oss.str());
 	
-	// Might be called from the ROS thread, not the Hub thread, need to lock	
-	lock();
+	// Might be called from the ROS thread, not the Hub thread, need to lock
+	if (doLock)
+		lock();
 
 	// write on all connected streams
 	for (StreamsSet::iterator it = dataStreams.begin(); it != dataStreams.end();++it)
@@ -62,7 +64,26 @@ void AsebaDashelHub::sendMessage(Message *message, Stream* sourceStream)
 		}
 	}
 
-	unlock();
+	if (doLock)
+		unlock();
+}
+
+void AsebaDashelHub::operator()()
+{
+	Hub::run();
+}
+
+void AsebaDashelHub::startThread()
+{
+	thread = new boost::thread(ref(*this));
+}
+
+void AsebaDashelHub::stopThread()
+{
+	Hub::stop();
+	thread->join();
+	delete thread;
+	thread = 0;
 }
 
 // the following method run in the blocking reception thread
@@ -82,7 +103,7 @@ void AsebaDashelHub::incomingData(Stream *stream)
 	}
 	
 	// send message to Dashel peers
-	sendMessage(message, stream);
+	sendMessage(message, false, stream);
 	
 	// process message for ROS peers, the receiver will delete it
 	asebaROS->processAsebaMessage(message);
@@ -97,8 +118,12 @@ void AsebaDashelHub::connectionCreated(Stream *stream)
 	
 	if (dataStreams.size() == 1)
 	{
-		// TODO: do somthing
-		//emit firstConnectionCreated();
+		// Note: on some robot such as the marXbot, because of hardware
+		// constraints this might not work. In this case, an external
+		// hack is required
+		cerr << "connection created" << endl;
+		GetDescription getDescription;
+		sendMessage(&getDescription, false);
 	}
 }
 
@@ -135,8 +160,14 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 	// load new data
 	int noNodeCount = 0;
 	bool wasError = false;
-	for (xmlNode *domNode = domRoot; domNode; domNode = domNode->next)
+	if (!xmlStrEqual(domRoot->name, BAD_CAST("network")))
 	{
+		ROS_ERROR("root node is not \"network\", XML considered as invalid");
+		wasError = true;
+	}
+	else for (xmlNode *domNode = xmlFirstElementChild(domRoot); domNode; domNode = domNode->next)
+	{
+		//cerr << "node " << domNode->name << endl;
 		if (domNode->type == XML_ELEMENT_NODE)
 		{
 			if (xmlStrEqual(domNode->name, BAD_CAST("node")))
@@ -145,17 +176,15 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 				xmlChar *name = xmlGetProp(domNode, BAD_CAST("name"));
 				if (!name)
 					ROS_WARN("missing \"name\" attribute in \"node\" entry");
-				xmlNode* child = xmlFirstElementChild(domNode);
-				if (!child)
-					ROS_WARN("missing child in \"node\" entry");
-				else if (name)
+				else
 				{
 					const string _name((const char *)name);
-					xmlChar * text = xmlNodeGetContent(child);
+					xmlChar * text = xmlNodeGetContent(domNode);
 					if (!text)
-						ROS_WARN("missing text in child of \"node\" entry");
+						ROS_WARN("missing text in \"node\" entry");
 					else
 					{
+						//cerr << text << endl;
 						bool ok;
 						unsigned nodeId(DescriptionsManager::getNodeId(_name, &ok));
 						if (ok)
@@ -178,11 +207,11 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 								sendBytecode(messages, nodeId, std::vector<uint16>(bytecode.begin(), bytecode.end()));
 								for (MessageVector::const_iterator it = messages.begin(); it != messages.end(); ++it)
 								{
-									hub.sendMessage(*it);
+									hub.sendMessage(*it, true);
 									delete *it;
 								}
 								Run msg(nodeId);
-								hub.sendMessage(&msg);
+								hub.sendMessage(&msg, true);
 								// retrieve user-defined variables for use in get/set
 								userDefinedVariablesMap[_name] = *compiler.getVariablesMap();
 							}
@@ -197,10 +226,8 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 						// free attribute and content
 						xmlFree(text);
 					}
-				}
-				if (name)
 					xmlFree(name);
-				
+				}
 			}
 			else if (xmlStrEqual(domNode->name, BAD_CAST("event")))
 			{
@@ -284,32 +311,115 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 
 bool AsebaROS::getNodeList(GetNodeList::Request& req, GetNodeList::Response& res)
 {
-	//res.
-	// TODO
+	transform(nodesNames.begin(), nodesNames.end(), back_inserter(res.nodeList), bind(&NodesNamesMap::value_type::first,_1));
 	return true;
 }
 
 bool AsebaROS::getNodeId(GetNodeId::Request& req, GetNodeId::Response& res)
 {
-	// TODO
-	return true;
+	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
+	if (nodeIt != nodesNames.end())
+	{
+		res.nodeId = nodeIt->second;
+		return true;
+	}
+	else
+	{
+		ROS_ERROR_STREAM("node " << req.nodeName << " does not exists");
+		return false;
+	}
 }
 
 bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res)
 {
-	// TODO
-	return true;
+	if (req.nodeId < nodesDescriptions.size())
+	{
+		res.nodeName = nodesDescriptions[req.nodeId].name;
+		return true;
+	}
+	else
+	{
+		ROS_ERROR_STREAM("node " << req.nodeId << " does not exists");
+		return false;
+	}
 }
+
+struct ExtractName
+{
+	string operator()(const TargetDescription::NamedVariable& nv) const { return nv.name; }
+};
 
 bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::Response& res)
 {
-	// TODO
-	return true;
+	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
+	if (nodeIt != nodesNames.end())
+	{
+		// node-defined variables
+		const unsigned nodeId(nodeIt->second);
+		const NodesDescriptionsMap::const_iterator descIt(nodesDescriptions.find(nodeId));
+		const NodeDescription& description(descIt->second);
+		transform(description.namedVariables.begin(), description.namedVariables.end(),
+				  back_inserter(res.variableList), ExtractName());
+		
+		// user-defined variables
+		const UserDefinedVariablesMap::const_iterator userVarMapIt(userDefinedVariablesMap.find(req.nodeName));
+		if (userVarMapIt != userDefinedVariablesMap.end())
+		{
+			const Compiler::VariablesMap& variablesMap(userVarMapIt->second);
+			transform(variablesMap.begin(), variablesMap.end(),
+					  back_inserter(res.variableList),  bind(&Compiler::VariablesMap::value_type::first,_1));
+		}
+		
+		return true;
+	}
+	else
+	{
+		ROS_ERROR_STREAM("node " << req.nodeName << " does not exists");
+		return false;
+	}
 }
 
 bool AsebaROS::setVariable(SetVariable::Request& req, SetVariable::Response& res)
 {
-	// TODO
+	// make sure the node exists
+	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
+	if (nodeIt == nodesNames.end())
+	{
+		ROS_ERROR_STREAM("node " << req.nodeName << " does not exists");
+		return false;
+	}
+	const unsigned nodeId(nodeIt->second);
+	
+	unsigned pos(unsigned(-1));
+	
+	// check whether variable is user-defined
+	const UserDefinedVariablesMap::const_iterator userVarMapIt(userDefinedVariablesMap.find(req.nodeName));
+	if (userVarMapIt != userDefinedVariablesMap.end())
+	{
+		const Compiler::VariablesMap& userVarMap(userVarMapIt->second);
+		const Compiler::VariablesMap::const_iterator userVarIt(userVarMap.find(req.variableName));
+		if (userVarIt != userVarMap.end())
+		{
+			pos = userVarIt->second.first;
+		}
+	}
+	
+	// if variable is not user-defined, check whether it is provided by this node
+	if (pos == unsigned(-1))
+	{
+		
+		bool ok;
+		pos = getVariablePos(nodeId, req.variableName, &ok);
+		if (!ok)
+		{
+			ROS_ERROR_STREAM("variable " << req.variableName << " does not exists in node " << req.nodeName);
+			return false;
+		}
+	}
+	
+	SetVariables msg(nodeId, pos, req.data);
+	hub.sendMessage(&msg, true);
+	
 	return true;
 }
 
@@ -363,25 +473,25 @@ void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 
 void AsebaROS::nodeDescriptionReceived(unsigned nodeId)
 {
-	nodesNames.at(nodesDescriptions.at(nodeId).name) = nodeId;
+	nodesNames[nodesDescriptions.at(nodeId).name] = nodeId;
+	cerr << "node description received " << nodeId << endl;
 }
 
 void AsebaROS::eventReceived(const AsebaAnonymousEventConstPtr& event)
 {
 	UserMessage userMessage(event->type, event->data);
-	hub.sendMessage(&userMessage);
+	hub.sendMessage(&userMessage, true);
 }
 
 void AsebaROS::eventReceived(const uint16 id, const AsebaEventConstPtr& event)
 {
 	UserMessage userMessage(id, event->data);
-	hub.sendMessage(&userMessage);
+	hub.sendMessage(&userMessage, true);
 }
 
 AsebaROS::AsebaROS(unsigned port, bool forward):
 	anonPub(n.advertise<AsebaAnonymousEvent>("anonymous_events", 100)),
 	anonSub(n.subscribe("anonymous_events", 100, &AsebaROS::eventReceived, this)),
-	spinner(8), // number of threads for ROS
 	hub(this, port, forward) // hub for dashel 
 {
 	// script
@@ -400,8 +510,6 @@ AsebaROS::AsebaROS(unsigned port, bool forward):
 	// events
 	s.push_back(n.advertiseService("get_event_id", &AsebaROS::getEventId, this));
 	s.push_back(n.advertiseService("get_event_name", &AsebaROS::getEventName, this));
-	
-	spinner.start();
 }
 
 AsebaROS::~AsebaROS()
@@ -411,11 +519,15 @@ AsebaROS::~AsebaROS()
 
 void AsebaROS::run()
 {
-	hub.run();
+	hub.startThread();
+	ros::spin();
+	hub.stopThread();
 }
 
 void AsebaROS::processAsebaMessage(Message *message)
 {
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	
 	// scan this message for nodes descriptions
 	DescriptionsManager::processMessage(message);
 	
@@ -447,12 +559,6 @@ void AsebaROS::processAsebaMessage(Message *message)
 		}*/
 	}
 }
-
-// AsebaROS::sendEvent(const AsebaEvent& asebaEvent)
-// {
-// 	// event
-// 	// TODO
-// }
 
 //! Show usage
 void dumpHelp(std::ostream &stream, const char *programName)
