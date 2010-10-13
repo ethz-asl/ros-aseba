@@ -70,22 +70,22 @@ void AsebaDashelHub::sendMessage(Message *message, bool doLock, Stream* sourceSt
 
 void AsebaDashelHub::operator()()
 {
-	/*Hub::run();
-	cerr << "exited hub::run" << endl;
-	ros::shutdown();*/
+	Hub::run();
+	//cerr << "hub returned" << endl;
+	ros::shutdown();
 }
 
 void AsebaDashelHub::startThread()
 {
-	//thread = new boost::thread(ref(*this));
+	thread = new boost::thread(ref(*this));
 }
 
 void AsebaDashelHub::stopThread()
 {
-	/*Hub::stop();
+	Hub::stop();
 	thread->join();
 	delete thread;
-	thread = 0;*/
+	thread = 0;
 }
 
 // the following method run in the blocking reception thread
@@ -123,7 +123,6 @@ void AsebaDashelHub::connectionCreated(Stream *stream)
 		// Note: on some robot such as the marXbot, because of hardware
 		// constraints this might not work. In this case, an external
 		// hack is required
-		cerr << "connection created" << endl;
 		GetDescription getDescription;
 		sendMessage(&getDescription, false);
 	}
@@ -142,6 +141,8 @@ void AsebaDashelHub::connectionClosed(Stream* stream, bool abnormal)
 
 bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 {
+	// locking: in this method, we lock access to the object's members
+	
 	// open document
 	const string& fileName(req.fileName);
 	xmlDoc *doc = xmlReadFile(fileName.c_str(), NULL, 0);
@@ -153,11 +154,13 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
     xmlNode *domRoot = xmlDocGetRootElement(doc);
 	
 	// clear existing data
+	mutex.lock();
 	commonDefinitions.events.clear();
 	commonDefinitions.constants.clear();
 	userDefinedVariablesMap.clear();
 	pubs.clear();
 	subs.clear();
+	mutex.unlock();
 	
 	// load new data
 	int noNodeCount = 0;
@@ -187,10 +190,13 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 					else
 					{
 						//cerr << text << endl;
+						mutex.lock();
 						bool ok;
 						unsigned nodeId(DescriptionsManager::getNodeId(_name, &ok));
+						mutex.unlock();
 						if (ok)
 						{
+							mutex.lock();
 							// compile code
 							std::istringstream is((const char *)text);
 							Error error;
@@ -201,6 +207,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 							compiler.setTargetDescription(getDescription(nodeId));
 							compiler.setCommonDefinitions(&commonDefinitions);
 							bool result = compiler.compile(is, bytecode, allocatedVariablesCount, error);
+							mutex.unlock();
 							
 							if (result)
 							{
@@ -215,7 +222,9 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 								Run msg(nodeId);
 								hub.sendMessage(&msg, true);
 								// retrieve user-defined variables for use in get/set
+								mutex.lock();
 								userDefinedVariablesMap[_name] = *compiler.getVariablesMap();
+								mutex.unlock();
 							}
 							else
 							{
@@ -225,6 +234,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 						}
 						else
 							noNodeCount++;
+						
 						// free attribute and content
 						xmlFree(text);
 					}
@@ -251,7 +261,10 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 						break;
 					}
 					else
+					{
+						interprocess::scoped_lock<boost::mutex> lock(mutex);
 						commonDefinitions.events.push_back(NamedValue(string((const char *)name), eventSize));
+					}
 				}
 				// free attributes
 				if (name)
@@ -270,7 +283,10 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 					ROS_WARN("missing \"value\" attribute in \"constant\" entry");
 				// add constant if attributes are valid
 				if (name && value)
+				{
+					interprocess::scoped_lock<boost::mutex> lock(mutex);
 					commonDefinitions.constants.push_back(NamedValue(string((const char *)name), atoi((const char *)value)));
+				}
 				// free attributes
 				if (name)
 					xmlFree(name);
@@ -289,9 +305,11 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 	if (wasError)
 	{
 		ROS_ERROR_STREAM("There was an error while loading script " << fileName);
+		mutex.lock();
 		commonDefinitions.events.clear();
 		commonDefinitions.constants.clear();
 		userDefinedVariablesMap.clear();
+		mutex.unlock();
 	}
 	
 	// check if there was some matching problem
@@ -301,24 +319,30 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 	}
 	
 	// recreate publishers and subscribers
+	mutex.lock();
 	typedef EventsDescriptionsVector::const_iterator EventsDescriptionsConstIt;
 	for (EventsDescriptionsConstIt it(commonDefinitions.events.begin()); it != commonDefinitions.events.end(); ++it)
 	{
 		pubs.push_back(n.advertise<AsebaEvent>("events/"+it->name, 100));
 		subs.push_back(n.subscribe<AsebaEvent>("events/"+it->name, 100, bind(&AsebaROS::eventReceived, this, it->value, _1)));
 	}
+	mutex.unlock();
 	
 	return true;
 }
 
 bool AsebaROS::getNodeList(GetNodeList::Request& req, GetNodeList::Response& res)
 {
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	
 	transform(nodesNames.begin(), nodesNames.end(), back_inserter(res.nodeList), bind(&NodesNamesMap::value_type::first,_1));
 	return true;
 }
 
 bool AsebaROS::getNodeId(GetNodeId::Request& req, GetNodeId::Response& res)
 {
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt != nodesNames.end())
 	{
@@ -334,6 +358,8 @@ bool AsebaROS::getNodeId(GetNodeId::Request& req, GetNodeId::Response& res)
 
 bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res)
 {
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	
 	if (req.nodeId < nodesDescriptions.size())
 	{
 		res.nodeName = nodesDescriptions[req.nodeId].name;
@@ -353,6 +379,8 @@ struct ExtractName
 
 bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::Response& res)
 {
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt != nodesNames.end())
 	{
@@ -385,6 +413,9 @@ bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::R
 
 bool AsebaROS::setVariable(SetVariable::Request& req, SetVariable::Response& res)
 {
+	// lock mutex to access object's members
+	mutex.lock();
+	
 	// make sure the node exists
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt == nodesNames.end())
@@ -421,6 +452,9 @@ bool AsebaROS::setVariable(SetVariable::Request& req, SetVariable::Response& res
 		}
 	}
 	
+	// unlock mutex to prevent dead-lock when sending message
+	mutex.unlock();
+	
 	SetVariables msg(nodeId, pos, req.data);
 	hub.sendMessage(&msg, true);
 	
@@ -435,6 +469,8 @@ bool AsebaROS::getVariable(GetVariable::Request& req, GetVariable::Response& res
 
 bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
 {
+	// needs locking, called by ROS's service thread
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
 	size_t id;
 	if (commonDefinitions.events.contains(req.name, &id))
 	{
@@ -446,6 +482,8 @@ bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
 
 bool AsebaROS::getEventName(GetEventName::Request& req, GetEventName::Response& res)
 {
+	// needs locking, called by ROS's service thread
+	interprocess::scoped_lock<boost::mutex> lock(mutex);
 	if (req.id < commonDefinitions.events.size())
 	{
 		res.name = commonDefinitions.events[req.id].name;
@@ -456,6 +494,7 @@ bool AsebaROS::getEventName(GetEventName::Request& req, GetEventName::Response& 
 
 void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 {
+	// does not need locking, called by other member function already within lock
 	assert(pubs.size() == commonDefinitions.events.size());
 	if (asebaMessage->type < commonDefinitions.events.size())
 	{
@@ -478,18 +517,20 @@ void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 
 void AsebaROS::nodeDescriptionReceived(unsigned nodeId)
 {
+	// does not need locking, called by parent object
 	nodesNames[nodesDescriptions.at(nodeId).name] = nodeId;
-	cerr << "node description received " << nodeId << endl;
 }
 
 void AsebaROS::eventReceived(const AsebaAnonymousEventConstPtr& event)
 {
+	// does not need locking, does not touch object's members
 	UserMessage userMessage(event->type, event->data);
 	hub.sendMessage(&userMessage, true);
 }
 
 void AsebaROS::eventReceived(const uint16 id, const AsebaEventConstPtr& event)
 {
+	// does not need locking, does not touch object's members
 	UserMessage userMessage(id, event->data);
 	hub.sendMessage(&userMessage, true);
 }
@@ -499,6 +540,8 @@ AsebaROS::AsebaROS(unsigned port, bool forward):
 	anonSub(n.subscribe("anonymous_events", 100, &AsebaROS::eventReceived, this)),
 	hub(this, port, forward) // hub for dashel 
 {
+	// does not need locking, called by main
+	
 	// script
 	s.push_back(n.advertiseService("load_script", &AsebaROS::loadScript, this));
 	
@@ -519,25 +562,22 @@ AsebaROS::AsebaROS(unsigned port, bool forward):
 
 AsebaROS::~AsebaROS()
 {
+	// does not need locking, called by main
 	xmlCleanupParser();
 }
 
 void AsebaROS::run()
 {
-	/*
+	// does not need locking, called by main
 	hub.startThread();
 	ros::spin();
-	cerr << "exited ros::spin" << endl;
-	hub.stopThread();*/
-	while (ros::ok())
-	{
-		ros::spinOnce();
-		hub.step();
-	}
+	//cerr << "ros returned" << endl;
+	hub.stopThread();
 }
 
 void AsebaROS::processAsebaMessage(Message *message)
 {
+	// needs locking, called by Dashel hub
 	interprocess::scoped_lock<boost::mutex> lock(mutex);
 	
 	// scan this message for nodes descriptions
