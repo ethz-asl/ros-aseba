@@ -70,20 +70,22 @@ void AsebaDashelHub::sendMessage(Message *message, bool doLock, Stream* sourceSt
 
 void AsebaDashelHub::operator()()
 {
-	Hub::run();
+	/*Hub::run();
+	cerr << "exited hub::run" << endl;
+	ros::shutdown();*/
 }
 
 void AsebaDashelHub::startThread()
 {
-	thread = new boost::thread(ref(*this));
+	//thread = new boost::thread(ref(*this));
 }
 
 void AsebaDashelHub::stopThread()
 {
-	Hub::stop();
+	/*Hub::stop();
 	thread->join();
 	delete thread;
-	thread = 0;
+	thread = 0;*/
 }
 
 // the following method run in the blocking reception thread
@@ -354,22 +356,24 @@ bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::R
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt != nodesNames.end())
 	{
-		// node-defined variables
-		const unsigned nodeId(nodeIt->second);
-		const NodesDescriptionsMap::const_iterator descIt(nodesDescriptions.find(nodeId));
-		const NodeDescription& description(descIt->second);
-		transform(description.namedVariables.begin(), description.namedVariables.end(),
-				  back_inserter(res.variableList), ExtractName());
-		
-		// user-defined variables
+		// search if we have a user-defined variable map?
 		const UserDefinedVariablesMap::const_iterator userVarMapIt(userDefinedVariablesMap.find(req.nodeName));
 		if (userVarMapIt != userDefinedVariablesMap.end())
 		{
+			// yes, us it 
 			const Compiler::VariablesMap& variablesMap(userVarMapIt->second);
 			transform(variablesMap.begin(), variablesMap.end(),
 					  back_inserter(res.variableList),  bind(&Compiler::VariablesMap::value_type::first,_1));
 		}
-		
+		else
+		{
+			// no, then only show node-defined variables
+			const unsigned nodeId(nodeIt->second);
+			const NodesDescriptionsMap::const_iterator descIt(nodesDescriptions.find(nodeId));
+			const NodeDescription& description(descIt->second);
+			transform(description.namedVariables.begin(), description.namedVariables.end(),
+					  back_inserter(res.variableList), ExtractName());
+		}
 		return true;
 	}
 	else
@@ -452,6 +456,7 @@ bool AsebaROS::getEventName(GetEventName::Request& req, GetEventName::Response& 
 
 void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 {
+	assert(pubs.size() == commonDefinitions.events.size());
 	if (asebaMessage->type < commonDefinitions.events.size())
 	{
 		// known, send on a named channel
@@ -519,9 +524,16 @@ AsebaROS::~AsebaROS()
 
 void AsebaROS::run()
 {
+	/*
 	hub.startThread();
 	ros::spin();
-	hub.stopThread();
+	cerr << "exited ros::spin" << endl;
+	hub.stopThread();*/
+	while (ros::ok())
+	{
+		ros::spinOnce();
+		hub.step();
+	}
 }
 
 void AsebaROS::processAsebaMessage(Message *message)
