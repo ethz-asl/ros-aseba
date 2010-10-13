@@ -74,6 +74,24 @@ class AsebaROS: public Aseba::DescriptionsManager
 protected:
 	typedef std::map<std::string, unsigned> NodesNamesMap;
 	typedef std::map<std::string, Aseba::Compiler::VariablesMap> UserDefinedVariablesMap;
+	class GetVariableQueryKey
+	{
+	public:
+		GetVariableQueryKey(unsigned nodeId, unsigned pos) : nodeId(nodeId), pos(pos) { }
+		bool operator<(const GetVariableQueryKey &that) const {
+			return (nodeId < that.nodeId && pos < that.pos);
+		}
+		unsigned nodeId;
+		unsigned pos;
+		
+	};
+	struct GetVariableQueryValue
+	{
+		typedef std::vector<sint16> DataVector;
+		DataVector data;
+		boost::condition_variable cond;
+	};
+	typedef std::map<GetVariableQueryKey, GetVariableQueryValue*> GetVariableQueryMap;
 	
 	ros::NodeHandle n; //!< node handler of this class 
 	ServiceServers s; //!< all services of this class
@@ -89,6 +107,7 @@ protected:
 	Aseba::CommonDefinitions commonDefinitions; //!< description of aseba constants and events
 	NodesNamesMap nodesNames; //!< the name of all nodes
 	UserDefinedVariablesMap userDefinedVariablesMap; //!< the name of the user-defined variables
+	GetVariableQueryMap getVariableQueries; //!< all get variable queries
 	
 protected:
 	bool loadScript(LoadScripts::Request& req, LoadScripts::Response& res);
@@ -104,6 +123,8 @@ protected:
 	bool getEventId(GetEventId::Request& req, GetEventId::Response& res);
 	bool getEventName(GetEventName::Request& req, GetEventName::Response& res);
 	
+	// utility
+	bool getNodePosFromNames(const std::string& nodeName, const std::string& variableName, unsigned& nodeId, unsigned& pos) const;
 	void sendEventOnROS(const Aseba::UserMessage* asebaMessage);
 	
 	// callbacks
@@ -116,8 +137,6 @@ public:
 	~AsebaROS();
 	
 	void run();
-	
-	// lOCK ? TODO
 	
 	void processAsebaMessage(Aseba::Message *message);
 	

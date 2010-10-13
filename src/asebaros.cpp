@@ -7,7 +7,6 @@
 #include <vector>
 #include <sstream>
 #include <boost/format.hpp>
-#include <boost/interprocess/sync/scoped_lock.hpp>
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -262,7 +261,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 					}
 					else
 					{
-						interprocess::scoped_lock<boost::mutex> lock(mutex);
+						lock_guard<boost::mutex> lock(mutex);
 						commonDefinitions.events.push_back(NamedValue(string((const char *)name), eventSize));
 					}
 				}
@@ -284,7 +283,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 				// add constant if attributes are valid
 				if (name && value)
 				{
-					interprocess::scoped_lock<boost::mutex> lock(mutex);
+					lock_guard<boost::mutex> lock(mutex);
 					commonDefinitions.constants.push_back(NamedValue(string((const char *)name), atoi((const char *)value)));
 				}
 				// free attributes
@@ -333,7 +332,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 
 bool AsebaROS::getNodeList(GetNodeList::Request& req, GetNodeList::Response& res)
 {
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	
 	transform(nodesNames.begin(), nodesNames.end(), back_inserter(res.nodeList), bind(&NodesNamesMap::value_type::first,_1));
 	return true;
@@ -341,7 +340,7 @@ bool AsebaROS::getNodeList(GetNodeList::Request& req, GetNodeList::Response& res
 
 bool AsebaROS::getNodeId(GetNodeId::Request& req, GetNodeId::Response& res)
 {
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt != nodesNames.end())
@@ -358,7 +357,7 @@ bool AsebaROS::getNodeId(GetNodeId::Request& req, GetNodeId::Response& res)
 
 bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res)
 {
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	
 	if (req.nodeId < nodesDescriptions.size())
 	{
@@ -379,7 +378,7 @@ struct ExtractName
 
 bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::Response& res)
 {
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	
 	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
 	if (nodeIt != nodesNames.end())
@@ -411,66 +410,50 @@ bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::R
 	}
 }
 
+
+
 bool AsebaROS::setVariable(SetVariable::Request& req, SetVariable::Response& res)
 {
-	// lock mutex to access object's members
+	// lock the access to the member methods
+	unsigned nodeId, pos;
+	
 	mutex.lock();
-	
-	// make sure the node exists
-	NodesNamesMap::const_iterator nodeIt(nodesNames.find(req.nodeName));
-	if (nodeIt == nodesNames.end())
-	{
-		ROS_ERROR_STREAM("node " << req.nodeName << " does not exists");
-		return false;
-	}
-	const unsigned nodeId(nodeIt->second);
-	
-	unsigned pos(unsigned(-1));
-	
-	// check whether variable is user-defined
-	const UserDefinedVariablesMap::const_iterator userVarMapIt(userDefinedVariablesMap.find(req.nodeName));
-	if (userVarMapIt != userDefinedVariablesMap.end())
-	{
-		const Compiler::VariablesMap& userVarMap(userVarMapIt->second);
-		const Compiler::VariablesMap::const_iterator userVarIt(userVarMap.find(req.variableName));
-		if (userVarIt != userVarMap.end())
-		{
-			pos = userVarIt->second.first;
-		}
-	}
-	
-	// if variable is not user-defined, check whether it is provided by this node
-	if (pos == unsigned(-1))
-	{
-		
-		bool ok;
-		pos = getVariablePos(nodeId, req.variableName, &ok);
-		if (!ok)
-		{
-			ROS_ERROR_STREAM("variable " << req.variableName << " does not exists in node " << req.nodeName);
-			return false;
-		}
-	}
-	
-	// unlock mutex to prevent dead-lock when sending message
+	bool exists = getNodePosFromNames(req.nodeName, req.variableName, nodeId, pos);
 	mutex.unlock();
+	
+	if (!exists)
+		return false;
 	
 	SetVariables msg(nodeId, pos, req.data);
 	hub.sendMessage(&msg, true);
-	
 	return true;
 }
 
 bool AsebaROS::getVariable(GetVariable::Request& req, GetVariable::Response& res)
 {
-	// TODO
+	unsigned nodeId, pos;
+	
+	// lock the access to the member methods, wait will unlock the underlying mutex
+	unique_lock<boost::mutex> lock(mutex);
+	
+	bool exists = getNodePosFromNames(req.nodeName, req.variableName, nodeId, pos);
+	if (!exists)
+		return false;
+	
+	const GetVariableQueryKey key(nodeId, pos);
+	GetVariableQueryValue query;
+	getVariableQueries[key] = &query;
+	query.cond.wait(lock);
+	res.data = query.data;
+	getVariableQueries.erase(key);
+	
 	return true;
 }
 
 bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
 {
 	// needs locking, called by ROS's service thread
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	size_t id;
 	if (commonDefinitions.events.contains(req.name, &id))
 	{
@@ -483,13 +466,53 @@ bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
 bool AsebaROS::getEventName(GetEventName::Request& req, GetEventName::Response& res)
 {
 	// needs locking, called by ROS's service thread
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	if (req.id < commonDefinitions.events.size())
 	{
 		res.name = commonDefinitions.events[req.id].name;
 		return true;
 	}
 	return false;
+}
+
+bool AsebaROS::getNodePosFromNames(const string& nodeName, const string& variableName, unsigned& nodeId, unsigned& pos) const
+{
+	// does not need locking, called by other member function already within the lock
+	
+	// make sure the node exists
+	NodesNamesMap::const_iterator nodeIt(nodesNames.find(nodeName));
+	if (nodeIt == nodesNames.end())
+	{
+		ROS_ERROR_STREAM("node " << nodeName << " does not exists");
+		return false;
+	}
+	nodeId = nodeIt->second;
+	pos = unsigned(-1);
+	
+	// check whether variable is user-defined
+	const UserDefinedVariablesMap::const_iterator userVarMapIt(userDefinedVariablesMap.find(nodeName));
+	if (userVarMapIt != userDefinedVariablesMap.end())
+	{
+		const Compiler::VariablesMap& userVarMap(userVarMapIt->second);
+		const Compiler::VariablesMap::const_iterator userVarIt(userVarMap.find(variableName));
+		if (userVarIt != userVarMap.end())
+		{
+			pos = userVarIt->second.first;
+		}
+	}
+	
+	// if variable is not user-defined, check whether it is provided by this node
+	if (pos == unsigned(-1))
+	{
+		bool ok;
+		pos = getVariablePos(nodeId, variableName, &ok);
+		if (!ok)
+		{
+			ROS_ERROR_STREAM("variable " << variableName << " does not exists in node " << nodeName);
+			return false;
+		}
+	}
+	return true;
 }
 
 void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
@@ -578,7 +601,7 @@ void AsebaROS::run()
 void AsebaROS::processAsebaMessage(Message *message)
 {
 	// needs locking, called by Dashel hub
-	interprocess::scoped_lock<boost::mutex> lock(mutex);
+	lock_guard<boost::mutex> lock(mutex);
 	
 	// scan this message for nodes descriptions
 	DescriptionsManager::processMessage(message);
@@ -592,23 +615,13 @@ void AsebaROS::processAsebaMessage(Message *message)
 	Variables *variables = dynamic_cast<Variables *>(message);
 	if (variables)
 	{
-		const unsigned nodeId(variables->source);
-		const unsigned pos(variables->start);
-		// TODO
-		/*for (RequestsList::iterator it = pendingReads.begin(); it != pendingReads.end(); ++it)
+		const GetVariableQueryKey queryKey(variables->source, variables->start);
+		GetVariableQueryMap::const_iterator queryIt(getVariableQueries.find(queryKey));
+		if (queryIt != getVariableQueries.end())
 		{
-			RequestData* request(*it);
-			if (request->nodeId == nodeId && request->pos == pos)
-			{
-				QDBusMessage &reply(request->reply);
-				Values values(fromAsebaVector(variables->variables));
-				reply << QVariant::fromValue(values);
-				DBusConnectionBus().send(reply);
-				delete request;
-				pendingReads.erase(it);
-				break;
-			}
-		}*/
+			queryIt->second->data = variables->variables;
+			queryIt->second->cond.notify_one();
+		}
 	}
 }
 
