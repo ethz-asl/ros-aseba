@@ -359,9 +359,10 @@ bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res
 {
 	lock_guard<boost::mutex> lock(mutex);
 	
-	if (req.nodeId < nodesDescriptions.size())
+	NodesDescriptionsMap::const_iterator nodeIt(nodesDescriptions.find(req.nodeId));
+	if (nodeIt != nodesDescriptions.end())
 	{
-		res.nodeName = nodesDescriptions[req.nodeId].name;
+		res.nodeName = nodeIt->second.name;
 		return true;
 	}
 	else
@@ -436,18 +437,48 @@ bool AsebaROS::getVariable(GetVariable::Request& req, GetVariable::Response& res
 	// lock the access to the member methods, wait will unlock the underlying mutex
 	unique_lock<boost::mutex> lock(mutex);
 	
+	// get information about variable
 	bool exists = getNodePosFromNames(req.nodeName, req.variableName, nodeId, pos);
 	if (!exists)
 		return false;
+	bool ok;
+	unsigned length = getVariableSize(nodeId, req.variableName, &ok);
+	if (!ok)
+		return false;
 	
+	// create query
 	const GetVariableQueryKey key(nodeId, pos);
 	GetVariableQueryValue query;
 	getVariableQueries[key] = &query;
-	query.cond.wait(lock);
-	res.data = query.data;
-	getVariableQueries.erase(key);
+	lock.unlock();
 	
-	return true;
+	// send message, outside lock to avoid deadlocks
+	GetVariables msg(nodeId, pos, length);
+	hub.sendMessage(&msg, true);
+	system_time const timeout(get_system_time()+posix_time::milliseconds(100));
+	
+	// wait 100 ms, considering the possibility of spurious wakes
+	bool result;
+	lock.lock();
+	while (query.data.empty())
+	{
+		result = query.cond.timed_wait(lock, timeout);
+		if (!result)
+			break;
+	}
+	
+	// remove key and return answer
+	getVariableQueries.erase(key);
+	if (result)
+	{
+		res.data = query.data;
+		return true;
+	}
+	else
+	{
+		ROS_ERROR_STREAM("read of node " << req.nodeName << ", variable " << req.variableName << " did not return a valid answer within 100ms");
+		return false;
+	}
 }
 
 bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
@@ -622,6 +653,8 @@ void AsebaROS::processAsebaMessage(Message *message)
 			queryIt->second->data = variables->variables;
 			queryIt->second->cond.notify_one();
 		}
+		else
+			ROS_WARN_STREAM("received Variables from node " << variables->source << ", pos " << variables->start << ", but no corresponding query was found");
 	}
 }
 
