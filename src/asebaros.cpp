@@ -30,14 +30,17 @@ AsebaDashelHub::AsebaDashelHub(AsebaROS* asebaROS, unsigned port, bool forward):
 	Dashel::Hub::connect(oss.str());
 }
 
+static string asebaMsgToString(Message *message)
+{
+	ostringstream oss;
+	message->dump(oss);
+	return oss.str();
+}
+
 void AsebaDashelHub::sendMessage(Message *message, bool doLock, Stream* sourceStream)
 {
 	// dump if requested
-	// TODO: check verbosity
-	// if (
-	ostringstream oss;
-	message->dump(oss);
-	ROS_DEBUG_STREAM(oss.str());
+	ROS_DEBUG_STREAM("sending aseba message: " << asebaMsgToString(message));
 	
 	// Might be called from the ROS thread, not the Hub thread, need to lock
 	if (doLock)
@@ -320,10 +323,11 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 	// recreate publishers and subscribers
 	mutex.lock();
 	typedef EventsDescriptionsVector::const_iterator EventsDescriptionsConstIt;
-	for (EventsDescriptionsConstIt it(commonDefinitions.events.begin()); it != commonDefinitions.events.end(); ++it)
+	for (size_t i = 0; i < commonDefinitions.events.size(); ++i)
 	{
-		pubs.push_back(n.advertise<AsebaEvent>("events/"+it->name, 100));
-		subs.push_back(n.subscribe<AsebaEvent>("events/"+it->name, 100, bind(&AsebaROS::eventReceived, this, it->value, _1)));
+		const string& name(commonDefinitions.events[i].name);
+		pubs.push_back(n.advertise<AsebaEvent>("events/"+name, 100));
+		subs.push_back(n.subscribe<AsebaEvent>("events/"+name, 100, bind(&AsebaROS::knownEventReceived, this, i, _1)));
 	}
 	mutex.unlock();
 	
@@ -554,6 +558,7 @@ void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 	{
 		// known, send on a named channel
 		shared_ptr<AsebaEvent> event(new AsebaEvent);
+		event->stamp = ros::Time::now();
 		event->source = asebaMessage->source;
 		event->data = asebaMessage->data;
 		pubs[asebaMessage->type].publish(event);
@@ -562,6 +567,7 @@ void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 	{
 		// unknown, send on the anonymous channel
 		shared_ptr<AsebaAnonymousEvent> event(new AsebaAnonymousEvent);
+		event->stamp = ros::Time::now();
 		event->source = asebaMessage->source;
 		event->type = asebaMessage->type;
 		event->data = asebaMessage->data;
@@ -582,7 +588,7 @@ void AsebaROS::eventReceived(const AsebaAnonymousEventConstPtr& event)
 	hub.sendMessage(&userMessage, true);
 }
 
-void AsebaROS::eventReceived(const uint16 id, const AsebaEventConstPtr& event)
+void AsebaROS::knownEventReceived(const uint16 id, const AsebaEventConstPtr& event)
 {
 	// does not need locking, does not touch object's members
 	UserMessage userMessage(id, event->data);
@@ -590,6 +596,7 @@ void AsebaROS::eventReceived(const uint16 id, const AsebaEventConstPtr& event)
 }
 
 AsebaROS::AsebaROS(unsigned port, bool forward):
+	n("aseba"),
 	anonPub(n.advertise<AsebaAnonymousEvent>("anonymous_events", 100)),
 	anonSub(n.subscribe("anonymous_events", 100, &AsebaROS::eventReceived, this)),
 	hub(this, port, forward) // hub for dashel 

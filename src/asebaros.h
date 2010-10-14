@@ -130,7 +130,7 @@ protected:
 	// callbacks
 	void nodeDescriptionReceived(unsigned nodeId);
 	void eventReceived(const AsebaAnonymousEventConstPtr& event);
-	void eventReceived(const uint16 id, const AsebaEventConstPtr& event);
+	void knownEventReceived(const uint16 id, const AsebaEventConstPtr& event);
 	
 public:
 	AsebaROS(unsigned port, bool forward);
