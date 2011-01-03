@@ -12,6 +12,7 @@
   <rosdep name="boost" />
   <rosdep name="qt4"/>
   <rosdep name="qwt"/>
+  <rosdep name="libxml2"/>
   <rosdep name="serial_port"/>
 
 </package>
