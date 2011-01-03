@@ -14,7 +14,7 @@ dashel-installed: $(SVN_DIR) Makefile.dashel
 	touch dashel-installed
 
 clean:
-	rm -rf $(BUILD_DIR) $(DASHEL_DIR)/include $(DASHEL_DIR)/lib dashel-installed
+	rm -rf $(BUILD_DIR) $(DASHEL_DIR)/include $(DASHEL_DIR)/lib dashel-installed patched
 
 wipe: clean
 	rm -rf $(DASHEL_DIR)

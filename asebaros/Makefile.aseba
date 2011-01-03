@@ -14,7 +14,7 @@ aseba-installed: $(SVN_DIR) Makefile.aseba
 	touch aseba-installed
 
 clean:
-	rm -rf $(BUILD_DIR) $(DASHEL_DIR)/include $(DASHEL_DIR)/lib aseba-installed
+	rm -rf $(BUILD_DIR) $(DASHEL_DIR)/include $(DASHEL_DIR)/lib aseba-installed patched
 
 wipe: clean
 	rm -rf $(DASHEL_DIR)
