@@ -1,0 +1,13 @@
+<stack>
+  <description brief="ethzasl_aseba">
+    Bridge to access an ASEBA network from ROS.
+    For more information about aseba, see: http://mobots.epfl.ch/aseba.html
+  </description>
+  <author>Stéphane Magnenat</author>
+  <license>BSD</license>  
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/ethzasl_aseba</url>
+  <depend stack="common" /> 
+  <depend stack="common_msgs" />
+  <depend stack="ros" />
+</stack>

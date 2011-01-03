@@ -13,23 +13,15 @@ rosbuild_init()
 
 # dependencies
 
-# standard
-find_package(LibXml2 REQUIRED)
-include_directories(${LIBXML2_INCLUDE_DIR})
+# Build dashel
+execute_process(COMMAND cmake -E chdir ${PROJECT_SOURCE_DIR} make -f Makefile.dashel RESULT_VARIABLE _make_failed)
+if(_make_failed)
+  message(FATAL_ERROR "Build of Dashel failed")
+endif(_make_failed)
 
-# dashel
-find_path(DASHEL_INCLUDE_DIR dashel.h
-	/usr/include/dashel
-	/usr/local/include/dashel
-	REQUIRED
-)
-find_library(DASHEL_LIBRARY dashel
-	/usr/lib
-	/usr/local/lib
-	REQUIRED
-)
-include_directories(${DASHEL_INCLUDE_DIR})
-set(EXTRA_LIBS ${DASHEL_LIBRARY})
+# Link dashel
+include_directories(${PROJECT_SOURCE_DIR}/dashel/include)
+link_directories(${PROJECT_SOURCE_DIR}/dashel/lib)
 if (WIN32)
 	set(EXTRA_LIBS ${EXTRA_LIBS} winspool ws2_32)
 else (WIN32)
@@ -46,40 +38,31 @@ else (WIN32)
 		set(EXTRA_LIBS ${EXTRA_LIBS} ${HAL_LIBRARIES} ${EXTRA_LIBS})
 	endif (APPLE)
 endif (WIN32)
+include_directories(${PROJECT_SOURCE_DIR}/dashel/include)
+link_directories(${PROJECT_SOURCE_DIR}/dashel/lib)
 
-# aseba
-find_path(ASEBA_INCLUDE_DIR msg/msg.h
-	/usr/include/aseba
-	/usr/local/include/aseba
-	REQUIRED
-)
-find_library(ASEBA_CORE_LIBRARY asebacore
-	/usr/lib/
-	/usr/local/lib/
-	REQUIRED
-)
-find_library(ASEBA_COMPILER_LIBRARY asebacompiler
-	/usr/lib/
-	/usr/local/lib/
-	REQUIRED
-)
-include_directories(${ASEBA_INCLUDE_DIR})
+# Build aseba
+execute_process(COMMAND cmake -E chdir ${PROJECT_SOURCE_DIR} make -f Makefile.aseba RESULT_VARIABLE _make_failed)
+if(_make_failed)
+  message(FATAL_ERROR "Build of Aseba failed")
+endif(_make_failed)
+
+# Link aseba
+include_directories(${PROJECT_SOURCE_DIR}/aseba/include)
+link_directories(${PROJECT_SOURCE_DIR}/aseba/lib)
+
+# libxml2
+find_package(LibXml2 REQUIRED)
+include_directories(${LIBXML2_INCLUDE_DIR})
 
 #set the default path for built executables to the "bin" directory
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
-#uncomment if you have defined messages
 rosbuild_genmsg()
-#uncomment if you have defined services
 rosbuild_gensrv()
 
-#common commands for building c++ executables and libraries
-#rosbuild_add_library(${PROJECT_NAME} src/example.cpp)
-#target_link_libraries(${PROJECT_NAME} another_library)
 rosbuild_add_boost_directories()
-#rosbuild_link_boost(${PROJECT_NAME} thread)
-#rosbuild_add_executable(example examples/example.cpp)
 rosbuild_add_executable(asebaros src/asebaros.cpp)
-target_link_libraries(asebaros ${ASEBA_COMPILER_LIBRARY} ${ASEBA_CORE_LIBRARY} ${DASHEL_LIBRARY} ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})
+target_link_libraries(asebaros asebacompiler asebacore dashel ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})

@@ -1,0 +1,6 @@
+qwt:
+  ubuntu: libqwt5-qt4-dev
+  debian: libqwt5-qt4-dev
+serial_port:
+  ubuntu: libhal-dev
+  debian: libhal-dev

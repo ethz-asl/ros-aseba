@@ -1,8 +1,7 @@
 <package>
   <description brief="asebaros">
-
-     asebaros
-
+    Bridge to access an ASEBA network from ROS.
+    For more information about aseba, see: http://mobots.epfl.ch/aseba.html
   </description>
   <author>Stéphane Magnenat</author>
   <license>BSD</license>
@@ -11,7 +10,9 @@
   <depend package="std_msgs"/>
   <depend package="roscpp"/>
   <rosdep name="boost" />
-  <resdep name="aseba"/>
+  <rosdep name="qt4"/>
+  <rosdep name="qwt"/>
+  <rosdep name="serial_port"/>
 
 </package>
 

@@ -1,6 +1,6 @@
 #include "asebaros.h"
 
-#include <compiler/compiler.h>
+#include <aseba/compiler/compiler.h>
 
 #include <ros/console.h>
 

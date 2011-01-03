@@ -1,0 +1,20 @@
+all: dashel-installed
+
+DASHEL_DIR = dashel
+SVN_DIR = $(DASHEL_DIR)/svn
+BUILD_DIR = $(DASHEL_DIR)/build
+SVN_URL = http://svn.gna.org/svn/dashel/trunk
+SVN_REVISION = -r 133
+include $(shell rospack find mk)/svn_checkout.mk
+
+dashel-installed: $(SVN_DIR) Makefile.dashel
+	mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=.. ../svn
+	cd $(BUILD_DIR) && make install
+	touch dashel-installed
+
+clean:
+	rm -rf $(BUILD_DIR) $(DASHEL_DIR)/include $(DASHEL_DIR)/lib dashel-installed
+
+wipe: clean
+	rm -rf $(DASHEL_DIR)

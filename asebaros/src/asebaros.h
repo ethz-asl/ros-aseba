@@ -5,8 +5,8 @@
 #include <boost/thread.hpp>
 #include <boost/thread/mutex.hpp>
 
-#include <msg/msg.h>
-#include <msg/descriptions-manager.h>
+#include <aseba/msg/msg.h>
+#include <aseba/msg/descriptions-manager.h>
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
