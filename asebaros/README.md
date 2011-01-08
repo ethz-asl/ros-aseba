@@ -9,10 +9,10 @@ Compilation
 Get the [ethzasl_aseba] stack.
 Make sure that it is included in your `ROS_PACKAGE_PATH`.
 
-Then, to installed the required development libraries and to compile [asebaros], execute:
+Then, to install the required development libraries and to compile [asebaros], execute:
 	rosmake --rosdep-install [asebaros]
 
-Information about the usage of [asebaros] is available on the [ROS] wiki at http://www.ros.org/wiki/asebaros.
+Information about the usage of [asebaros] is available on the [ROS] wiki at [http://www.ros.org/wiki/asebaros](http://www.ros.org/wiki/asebaros).
 
 [ASEBA]: http://mobots.epfl.ch/aseba.html
 [ROS]: http://www.ros.org
