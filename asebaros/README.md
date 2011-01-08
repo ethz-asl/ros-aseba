@@ -13,7 +13,7 @@ Make sure that it is included in your `ROS_PACKAGE_PATH`:
 	export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:`pwd`/ethzasl_aseba
 
 Then, to install the required development libraries and to compile [asebaros], execute:
-	rosmake --rosdep-install [asebaros]
+	rosmake --rosdep-install asebaros
 
 Information about the usage of [asebaros] is available on the [ROS] wiki at [http://www.ros.org/wiki/asebaros](http://www.ros.org/wiki/asebaros).
 
