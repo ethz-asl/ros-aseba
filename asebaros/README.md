@@ -6,8 +6,11 @@ It maps the [ASEBA] named events to [ROS] topics in a dynamic way, when loading 
 Compilation
 -----------
 
-Get the [ethzasl_aseba] stack.
-Make sure that it is included in your `ROS_PACKAGE_PATH`.
+Get the [ethzasl_aseba] stack:
+	git clone git://github.com/ethz-asl/ros-aseba.git ethzasl_aseba
+
+Make sure that it is included in your `ROS_PACKAGE_PATH`:
+	export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:`pwd`/ethzasl_aseba
 
 Then, to install the required development libraries and to compile [asebaros], execute:
 	rosmake --rosdep-install [asebaros]
