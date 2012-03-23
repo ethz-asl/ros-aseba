@@ -10,7 +10,7 @@
   <depend package="std_msgs"/>
   <depend package="roscpp"/>
   <rosdep name="boost" />
-  <rosdep name="qt4"/>
+  <rosdep name="libqt4-dev"/>
   <rosdep name="libqwt5-qt4-dev"/>
   <rosdep name="libxml2"/>
   <rosdep name="libhal-dev"/>
