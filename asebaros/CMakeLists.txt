@@ -65,4 +65,5 @@ rosbuild_gensrv()
 
 rosbuild_add_boost_directories()
 rosbuild_add_executable(asebaros src/asebaros.cpp)
+rosbuild_link_boost(asebaros thread)
 target_link_libraries(asebaros asebacompiler asebacore dashel ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})
