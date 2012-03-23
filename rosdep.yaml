@@ -1,14 +1,21 @@
-qwt:
+qwt5-qt4:
   ubuntu:
     apt:
       libqwt5-qt4-dev
   debian:
     apt:
       libqwt5-qt4-dev
-serial_port:
+  fedora:
+    yum:
+      qwt-devel
+hal:
   ubuntu:
     apt:
       libhal-dev
   debian:
     apt:
       libhal-dev
+  fedora:
+    yum:
+      hal-devel
+    

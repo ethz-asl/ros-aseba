@@ -11,9 +11,9 @@
   <depend package="roscpp"/>
   <rosdep name="boost" />
   <rosdep name="qt4"/>
-  <rosdep name="qwt"/>
+  <rosdep name="qwt5-qt4"/>
   <rosdep name="libxml2"/>
-  <rosdep name="serial_port"/>
+  <rosdep name="hal"/>
 
 </package>
 
