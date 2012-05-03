@@ -584,15 +584,23 @@ void AsebaROS::nodeDescriptionReceived(unsigned nodeId)
 void AsebaROS::eventReceived(const AsebaAnonymousEventConstPtr& event)
 {
 	// does not need locking, does not touch object's members
-	UserMessage userMessage(event->type, event->data);
-	hub.sendMessage(&userMessage, true);
+	if (event->source == 0)
+	{
+		// forward only messages with source 0, which means, originating from this computer
+		UserMessage userMessage(event->type, event->data);
+		hub.sendMessage(&userMessage, true);
+	}
 }
 
 void AsebaROS::knownEventReceived(const uint16 id, const AsebaEventConstPtr& event)
 {
 	// does not need locking, does not touch object's members
-	UserMessage userMessage(id, event->data);
-	hub.sendMessage(&userMessage, true);
+	if (event->source == 0)
+	{
+		// forward only messages with source 0, which means, originating from this computer
+		UserMessage userMessage(id, event->data);
+		hub.sendMessage(&userMessage, true);
+	}
 }
 
 AsebaROS::AsebaROS(unsigned port, bool forward):
