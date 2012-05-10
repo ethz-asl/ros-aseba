@@ -1,21 +1,13 @@
+libqt4-dev:
+  ubuntu: libqt4-dev qt4-dev-tools
+  debian: libqt4-dev qt4-dev-tools
+  fedora: qt4-devel
 libqwt5-qt4-dev:
-  ubuntu:
-    apt:
-      libqwt5-qt4-dev
-  debian:
-    apt:
-      libqwt5-qt4-dev
-  fedora:
-    yum:
-      qwt-devel
+  ubuntu: libqwt5-qt4-dev
+  debian: libqwt5-qt4-dev
+  fedora: qwt-devel
 libhal-dev:
-  ubuntu:
-    apt:
-      libhal-dev
-  debian:
-    apt:
-      libhal-dev
-  fedora:
-    yum:
-      hal-devel
+  ubuntu: libhal-dev
+  debian: libhal-dev
+  fedora: hal-devel
     
