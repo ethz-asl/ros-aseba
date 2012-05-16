@@ -1,7 +1,7 @@
 <package>
   <description brief="asebaros">
-    Bridge to access an ASEBA network from ROS.
-    For more information about aseba, see: http://mobots.epfl.ch/aseba.html
+    Bridge to access an Aseba network from ROS.
+    For more information about Aseba, see: http://aseba.wikidot.com
   </description>
   <author>Stéphane Magnenat</author>
   <license>BSD</license>

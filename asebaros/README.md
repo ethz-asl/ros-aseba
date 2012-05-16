@@ -1,6 +1,6 @@
-[asebaros] is a bridge between [ASEBA] and [ROS].
+[asebaros] is a bridge between [Aseba] and [ROS].
 It allows to load source code, inspect the network structure, read and write variables, and send and receive events from [ROS].
-It maps the [ASEBA] named events to [ROS] topics in a dynamic way, when loading source code.
+It maps the [Aseba] named events to [ROS] topics in a dynamic way, when loading source code.
 [asebaros] will compile on platforms supported by [ROS].
 
 Compilation
@@ -17,7 +17,7 @@ Then, to install the required development libraries and to compile [asebaros], e
 
 Information about the usage of [asebaros] is available on the [ROS] wiki at [http://www.ros.org/wiki/asebaros](http://www.ros.org/wiki/asebaros).
 
-[ASEBA]: http://mobots.epfl.ch/aseba.html
+[Aseba]: http://aseba.wikidot.com
 [ROS]: http://www.ros.org
 [ethzasl_aseba]: http://www.ros.org/wiki/ethzasl_aseba
 [asebaros]: http://www.ros.org/wiki/asebaros
