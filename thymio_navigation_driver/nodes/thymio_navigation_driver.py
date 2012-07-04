@@ -10,7 +10,7 @@ from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from tf.broadcaster import TransformBroadcaster
-from math import sin,cos
+from math import sin,cos,atan2
 import time
 
 BASE_WIDTH = 95     # millimeters
@@ -51,14 +51,13 @@ class ThymioDriver():
 	
 	# ======== processing odometry events received from the robot ======== 
 	def on_aseba_odometry_event(self,data): 
-		dsl = data.data[0]/10.0 # left wheel delta in mm
-		dsr = data.data[1]/10.0 # right wheel delta in mm
 		now = data.stamp
 		dt = (now-self.then).to_sec()
 		self.then = now
-
-		ds = ((dsl+dsr)/2.0)/1000.0 # robot traveled distance in meters
-		dth = (dsr-dsl)/BASE_WIDTH # turn angle
+		dsl = (data.data[0]*dt)/SPEED_COEF # left wheel delta in mm
+		dsr = (data.data[1]*dt)/SPEED_COEF # right wheel delta in mm
+		ds = ((dsl+dsr)/2.0)/1000.0      # robot traveled distance in meters
+		dth = atan2(dsr-dsl,BASE_WIDTH)  # turn angle
 
 		self.x += ds*cos(self.th+dth/2.0)
 		self.y += ds*sin(self.th+dth/2.0)
@@ -100,8 +99,13 @@ class ThymioDriver():
 		while not rospy.is_shutdown():
 			rospy.spin()
 
-if __name__ == '__main__':
+def main():
 	try:
 		robot = ThymioDriver()
 		robot.control_loop()
-	except rospy.ROSInterruptException: pass
+	except rospy.ROSInterruptException:
+		pass
+
+if __name__ == '__main__':
+	main()
+	

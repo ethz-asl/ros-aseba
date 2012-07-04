@@ -1,0 +1,4 @@
+<launch>
+  <include file="$(find thymio_navigation_driver)/launch/thymio_navigation_joystick.launch"/>
+  <node pkg="rviz" type="rviz" name="rviz" output="screen" args="-d $(find thymio_navigation_driver)/launch/thymio_navigation_viewer.vcg"/>
+</launch>
