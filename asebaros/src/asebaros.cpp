@@ -553,8 +553,8 @@ bool AsebaROS::getNodePosFromNames(const string& nodeName, const string& variabl
 void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 {
 	// does not need locking, called by other member function already within lock
-	assert(pubs.size() == commonDefinitions.events.size());
-	if (asebaMessage->type < commonDefinitions.events.size())
+	if ((pubs.size() == commonDefinitions.events.size()) && // if different, we are currently loading a new script, publish on anonymous channel
+		(asebaMessage->type < commonDefinitions.events.size()))
 	{
 		// known, send on a named channel
 		shared_ptr<AsebaEvent> event(new AsebaEvent);
