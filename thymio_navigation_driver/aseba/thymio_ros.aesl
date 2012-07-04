@@ -1,0 +1,25 @@
+<!DOCTYPE aesl-source>
+<network>
+
+
+<!--list of global events-->
+<event size="2" name="set_speed"/>
+<event size="2" name="odometry"/>
+
+
+<!--list of constants-->
+
+
+<!--show keywords state-->
+<keywords flag="true"/>
+
+
+<!--source code of node thymio-II-->
+<node name="thymio-II">onevent set_speed
+call math.copy(motor.target, event.args[0:1])
+
+onevent motor
+emit odometry motor.speed</node>
+
+
+</network>

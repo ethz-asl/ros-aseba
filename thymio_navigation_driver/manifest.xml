@@ -1,0 +1,20 @@
+<package>
+  <description brief="Navigation driver for Thymio II robot">
+
+     This driver listens to cmd_vel and provides odometry for the Thymio II
+     robot through asebaros.
+
+  </description>
+  <author>Stéphane Magnenat and Alexey Gribovskiy</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/thymio_navigation_driver</url>
+  <depend package="asebaros"/>
+  <depend package="rospy"/>
+  <depend package="geometry_msgs"/>
+  <depend package="nav_msgs"/>
+  <depend package="tf"/>
+
+</package>
+
+
