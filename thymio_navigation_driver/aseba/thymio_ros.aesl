@@ -15,11 +15,16 @@
 
 
 <!--source code of node thymio-II-->
-<node name="thymio-II">onevent set_speed
-call math.copy(motor.target, event.args[0:1])
+<node name="thymio-II">var temp[2]
+
+onevent set_speed
+motor.left.target = event.args[0]
+motor.right.target = event.args[1]
 
 onevent motor
-emit odometry motor.speed</node>
+temp[0] = motor.left.speed
+temp[1] = motor.right.speed
+emit odometry temp</node>
 
 
 </network>
