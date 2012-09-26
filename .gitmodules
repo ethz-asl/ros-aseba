@@ -1,0 +1,3 @@
+[submodule "dashel/upstream_src"]
+	path = dashel/upstream_src
+	url = git@github.com:aseba-community/dashel.git
