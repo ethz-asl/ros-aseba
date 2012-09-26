@@ -1,0 +1,18 @@
+<package>
+  <description brief="dashel">
+
+     Fetches dashel through git submodule and makes it available to ROS
+
+  </description>
+  <author>Stéphane Magnenat</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/dashel</url>
+  <rosdep name="doxygen"/>
+  <rosdep name="libudev-dev"/>
+  <export>
+    <cpp cflags="-I${prefix}/include" lflags="-L${prefix}/lib -Wl,-rpath,${prefix}/lib -ldashel" />
+  </export>
+</package>
+
+
