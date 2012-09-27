@@ -18,6 +18,33 @@ using namespace boost;
 using namespace Dashel;
 using namespace Aseba;
 
+// UTF8 to wstring
+std::wstring widen(const char *src)
+{
+	const size_t destSize(mbstowcs(0, src, 0)+1);
+	std::vector<wchar_t> buffer(destSize, 0);
+	mbstowcs(&buffer[0], src, destSize);
+	return std::wstring(buffer.begin(), buffer.end() - 1);
+}
+std::wstring widen(const std::string& src)
+{
+	return widen(src.c_str());
+}
+
+// wstring to UTF8
+std::string narrow(const wchar_t* src)
+{
+	const size_t destSize(wcstombs(0, src, 0)+1);
+	std::vector<char> buffer(destSize, 0);
+	wcstombs(&buffer[0], src, destSize);
+	return std::string(buffer.begin(), buffer.end() - 1);
+}
+std::string narrow(const std::wstring& src)
+{
+	return narrow(src.c_str());
+}
+
+
 // AsebaDashelHub
 
 AsebaDashelHub::AsebaDashelHub(AsebaROS* asebaROS, unsigned port, bool forward):
@@ -30,9 +57,9 @@ AsebaDashelHub::AsebaDashelHub(AsebaROS* asebaROS, unsigned port, bool forward):
 	Dashel::Hub::connect(oss.str());
 }
 
-static string asebaMsgToString(Message *message)
+static wstring asebaMsgToString(Message *message)
 {
-	ostringstream oss;
+	wostringstream oss;
 	message->dump(oss);
 	return oss.str();
 }
@@ -40,7 +67,8 @@ static string asebaMsgToString(Message *message)
 void AsebaDashelHub::sendMessage(Message *message, bool doLock, Stream* sourceStream)
 {
 	// dump if requested
-	ROS_DEBUG_STREAM("sending aseba message: " << asebaMsgToString(message));
+	// TODO: put a request for unicode version of ROS debug
+	ROS_DEBUG_STREAM("sending aseba message: " << narrow(asebaMsgToString(message)));
 	
 	// Might be called from the ROS thread, not the Hub thread, need to lock
 	if (doLock)
@@ -194,13 +222,13 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 						//cerr << text << endl;
 						mutex.lock();
 						bool ok;
-						unsigned nodeId(DescriptionsManager::getNodeId(_name, &ok));
+						unsigned nodeId(DescriptionsManager::getNodeId(widen(_name), &ok));
 						mutex.unlock();
 						if (ok)
 						{
 							mutex.lock();
 							// compile code
-							std::istringstream is((const char *)text);
+							std::wistringstream is(widen((const char *)text));
 							Error error;
 							BytecodeVector bytecode;
 							unsigned allocatedVariablesCount;
@@ -230,7 +258,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 							}
 							else
 							{
-								ROS_ERROR_STREAM("compilation of " << fileName << ", node " << _name << " failed: " << error.toString());
+								ROS_ERROR_STREAM("compilation of " << fileName << ", node " << _name << " failed: " << narrow(error.toWString()));
 								wasError = true;
 							}
 						}
@@ -265,7 +293,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 					else
 					{
 						lock_guard<boost::mutex> lock(mutex);
-						commonDefinitions.events.push_back(NamedValue(string((const char *)name), eventSize));
+						commonDefinitions.events.push_back(NamedValue(widen((const char *)name), eventSize));
 					}
 				}
 				// free attributes
@@ -287,7 +315,7 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 				if (name && value)
 				{
 					lock_guard<boost::mutex> lock(mutex);
-					commonDefinitions.constants.push_back(NamedValue(string((const char *)name), atoi((const char *)value)));
+					commonDefinitions.constants.push_back(NamedValue(widen((const char *)name), atoi((const char *)value)));
 				}
 				// free attributes
 				if (name)
@@ -325,9 +353,9 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 	typedef EventsDescriptionsVector::const_iterator EventsDescriptionsConstIt;
 	for (size_t i = 0; i < commonDefinitions.events.size(); ++i)
 	{
-		const string& name(commonDefinitions.events[i].name);
-		pubs.push_back(n.advertise<AsebaEvent>("events/"+name, 100));
-		subs.push_back(n.subscribe<AsebaEvent>("events/"+name, 100, bind(&AsebaROS::knownEventReceived, this, i, _1)));
+		const wstring& name(commonDefinitions.events[i].name);
+		pubs.push_back(n.advertise<AsebaEvent>(narrow(L"events/"+name), 100));
+		subs.push_back(n.subscribe<AsebaEvent>(narrow(L"events/"+name), 100, bind(&AsebaROS::knownEventReceived, this, i, _1)));
 	}
 	mutex.unlock();
 	
@@ -366,7 +394,7 @@ bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res
 	NodesDescriptionsMap::const_iterator nodeIt(nodesDescriptions.find(req.nodeId));
 	if (nodeIt != nodesDescriptions.end())
 	{
-		res.nodeName = nodeIt->second.name;
+		res.nodeName = narrow(nodeIt->second.name);
 		return true;
 	}
 	else
@@ -376,9 +404,14 @@ bool AsebaROS::getNodeName(GetNodeName::Request& req, GetNodeName::Response& res
 	}
 }
 
-struct ExtractName
+struct ExtractNameVar
 {
-	string operator()(const TargetDescription::NamedVariable& nv) const { return nv.name; }
+	string operator()(const std::pair<std::wstring, std::pair<unsigned, unsigned> > p) const { return narrow(p.first); }
+};
+
+struct ExtractNameDesc
+{
+	string operator()(const TargetDescription::NamedVariable& nv) const { return narrow(nv.name); }
 };
 
 bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::Response& res)
@@ -395,7 +428,7 @@ bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::R
 			// yes, us it 
 			const Compiler::VariablesMap& variablesMap(userVarMapIt->second);
 			transform(variablesMap.begin(), variablesMap.end(),
-					  back_inserter(res.variableList),  bind(&Compiler::VariablesMap::value_type::first,_1));
+					  back_inserter(res.variableList), ExtractNameVar());
 		}
 		else
 		{
@@ -404,7 +437,7 @@ bool AsebaROS::getVariableList(GetVariableList::Request& req, GetVariableList::R
 			const NodesDescriptionsMap::const_iterator descIt(nodesDescriptions.find(nodeId));
 			const NodeDescription& description(descIt->second);
 			transform(description.namedVariables.begin(), description.namedVariables.end(),
-					  back_inserter(res.variableList), ExtractName());
+					  back_inserter(res.variableList), ExtractNameDesc());
 		}
 		return true;
 	}
@@ -446,7 +479,7 @@ bool AsebaROS::getVariable(GetVariable::Request& req, GetVariable::Response& res
 	if (!exists)
 		return false;
 	bool ok;
-	unsigned length = getVariableSize(nodeId, req.variableName, &ok);
+	unsigned length = getVariableSize(nodeId, widen(req.variableName), &ok);
 	if (!ok)
 		return false;
 	
@@ -490,7 +523,7 @@ bool AsebaROS::getEventId(GetEventId::Request& req, GetEventId::Response& res)
 	// needs locking, called by ROS's service thread
 	lock_guard<boost::mutex> lock(mutex);
 	size_t id;
-	if (commonDefinitions.events.contains(req.name, &id))
+	if (commonDefinitions.events.contains(widen(req.name), &id))
 	{
 		res.id = id;
 		return true;
@@ -504,7 +537,7 @@ bool AsebaROS::getEventName(GetEventName::Request& req, GetEventName::Response& 
 	lock_guard<boost::mutex> lock(mutex);
 	if (req.id < commonDefinitions.events.size())
 	{
-		res.name = commonDefinitions.events[req.id].name;
+		res.name = narrow(commonDefinitions.events[req.id].name);
 		return true;
 	}
 	return false;
@@ -529,7 +562,7 @@ bool AsebaROS::getNodePosFromNames(const string& nodeName, const string& variabl
 	if (userVarMapIt != userDefinedVariablesMap.end())
 	{
 		const Compiler::VariablesMap& userVarMap(userVarMapIt->second);
-		const Compiler::VariablesMap::const_iterator userVarIt(userVarMap.find(variableName));
+		const Compiler::VariablesMap::const_iterator userVarIt(userVarMap.find(widen(variableName)));
 		if (userVarIt != userVarMap.end())
 		{
 			pos = userVarIt->second.first;
@@ -540,7 +573,7 @@ bool AsebaROS::getNodePosFromNames(const string& nodeName, const string& variabl
 	if (pos == unsigned(-1))
 	{
 		bool ok;
-		pos = getVariablePos(nodeId, variableName, &ok);
+		pos = getVariablePos(nodeId, widen(variableName), &ok);
 		if (!ok)
 		{
 			ROS_ERROR_STREAM("variable " << variableName << " does not exists in node " << nodeName);
@@ -578,7 +611,7 @@ void AsebaROS::sendEventOnROS(const UserMessage* asebaMessage)
 void AsebaROS::nodeDescriptionReceived(unsigned nodeId)
 {
 	// does not need locking, called by parent object
-	nodesNames[nodesDescriptions.at(nodeId).name] = nodeId;
+	nodesNames[narrow(nodesDescriptions.at(nodeId).name)] = nodeId;
 }
 
 void AsebaROS::eventReceived(const AsebaAnonymousEventConstPtr& event)
