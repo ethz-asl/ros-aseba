@@ -11,45 +11,22 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 
 rosbuild_init()
 
-# dependencies
-
-# # Build dashel
-# execute_process(COMMAND cmake -E chdir ${PROJECT_SOURCE_DIR} make -f Makefile.dashel RESULT_VARIABLE _make_failed)
-# if(_make_failed)
-#   message(FATAL_ERROR "Build of Dashel failed")
-# endif(_make_failed)
-# 
-# # Link dashel
-# include_directories(${PROJECT_SOURCE_DIR}/dashel/include)
-# link_directories(${PROJECT_SOURCE_DIR}/dashel/lib)
-# if (WIN32)
-# 	set(EXTRA_LIBS ${EXTRA_LIBS} winspool ws2_32)
-# else (WIN32)
-# 	if (APPLE)
-# 		find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
-# 		find_library(IOKIT_LIBRARY IOKit REQUIRED)
-# 		mark_as_advanced(COREFOUNDATION_LIBRARY)
-# 		mark_as_advanced(IOKIT_LIBRARY)
-# 		set(EXTRA_LIBS ${EXTRA_LIBS} ${COREFOUNDATION_LIBRARY} ${IOKIT_LIBRARY} ${EXTRA_LIBS})
-# 	else (APPLE)
-# 		find_package(PkgConfig)
-# 		pkg_check_modules(HAL hal)
-# 		include_directories(${HAL_INCLUDE_DIRS})
-# 		set(EXTRA_LIBS ${EXTRA_LIBS} ${HAL_LIBRARIES} ${EXTRA_LIBS})
-# 	endif (APPLE)
-# endif (WIN32)
-# include_directories(${PROJECT_SOURCE_DIR}/dashel/include)
-# link_directories(${PROJECT_SOURCE_DIR}/dashel/lib)
-# 
-# # Build aseba
-# execute_process(COMMAND cmake -E chdir ${PROJECT_SOURCE_DIR} make -f Makefile.aseba RESULT_VARIABLE _make_failed)
-# if(_make_failed)
-#   message(FATAL_ERROR "Build of Aseba failed")
-# endif(_make_failed)
-# 
-# # Link aseba
-# include_directories(${PROJECT_SOURCE_DIR}/aseba/include)
-# link_directories(${PROJECT_SOURCE_DIR}/aseba/lib)
+if (WIN32)
+	set(EXTRA_LIBS ${EXTRA_LIBS} winspool ws2_32 setupapi)
+else (WIN32)
+	if (APPLE)
+		find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+		find_library(IOKIT_LIBRARY IOKit)
+		mark_as_advanced(COREFOUNDATION_LIBRARY)
+		mark_as_advanced(IOKIT_LIBRARY)
+		set(EXTRA_LIBS ${EXTRA_LIBS} ${COREFOUNDATION_LIBRARY} ${IOKIT_LIBRARY} ${EXTRA_LIBS})
+	else (APPLE)
+		find_path(UDEV_INCLUDE_DIR libudev.h)
+		find_library(UDEV_LIBS udev)
+		include_directories(${UDEV_INCLUDE_DIR})
+		set(EXTRA_LIBS ${EXTRA_LIBS} ${UDEV_LIBS} ${EXTRA_LIBS})
+	endif (APPLE)
+endif (WIN32)
 
 # libxml2
 find_package(LibXml2 REQUIRED)
@@ -66,4 +43,4 @@ rosbuild_gensrv()
 rosbuild_add_boost_directories()
 rosbuild_add_executable(asebaros src/asebaros.cpp)
 rosbuild_link_boost(asebaros thread)
-target_link_libraries(asebaros asebacompiler asebacore dashel ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})
+target_link_libraries(asebaros asebacompiler asebacore ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})

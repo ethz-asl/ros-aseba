@@ -11,6 +11,7 @@
   <depend package="roscpp"/>
   <depend package="dashel"/>
   <depend package="aseba"/>
+  <rosdep name="libudev-dev"/>
   <rosdep name="boost" />
   <rosdep name="libqt4-dev"/>
   <rosdep name="qt4-dev-tools"/>
