@@ -13,6 +13,7 @@
   <depend package="aseba"/>
   <rosdep name="boost" />
   <rosdep name="libqt4-dev"/>
+  <rosdep name="qt4-dev-tools"/>
   <rosdep name="libqwt5-qt4-dev"/>
   <rosdep name="libxml2"/>
 
