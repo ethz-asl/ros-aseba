@@ -1,6 +1,6 @@
 all: aseba
 
-aseba:
+aseba: $(wildcard upstream_src/*/*.cpp) $(wildcard upstream_src/*/*.h)
 	mkdir -p build
 	cd build && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=.. -DDASHEL_INCLUDE_DIR=`rospack cflags-only-I dashel` -DCMAKE_LIBRARY_PATH=`rospack libs-only-L dashel` ../upstream_src
 	cd build && make
