@@ -220,9 +220,13 @@ bool AsebaROS::loadScript(LoadScripts::Request& req, LoadScripts::Response& res)
 					else
 					{
 						//cerr << text << endl;
+						unsigned preferedId(0);
+						xmlChar *storedId = xmlGetProp(domNode, BAD_CAST("nodeId"));
+						if (storedId)
+							preferedId = unsigned(atoi((char*)storedId));
 						mutex.lock();
 						bool ok;
-						unsigned nodeId(DescriptionsManager::getNodeId(widen(_name), &ok));
+						unsigned nodeId(DescriptionsManager::getNodeId(widen(_name), preferedId, &ok));
 						mutex.unlock();
 						if (ok)
 						{
